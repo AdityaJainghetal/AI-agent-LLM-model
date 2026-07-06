@@ -69,6 +69,12 @@ async function streamAIResponse(
   try {
     const fullPrompt = `${DEFAULT_SYSTEM_PROMPT}\n\n${userContent}`;
 
+    console.log("Ollama request", {
+      endpoint: OLLAMA_GENERATE_ENDPOINT,
+      model: DEFAULT_MODEL,
+      promptLength: fullPrompt.length,
+    });
+
     const response = await axios.post(
       OLLAMA_GENERATE_ENDPOINT,
       {
@@ -79,7 +85,8 @@ async function streamAIResponse(
       },
       {
         responseType: "stream",
-        timeout: 120000,
+        timeout: 300000,
+        maxBodyLength: Infinity,
         signal: controller.signal,
       },
     );
