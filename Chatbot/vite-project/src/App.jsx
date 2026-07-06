@@ -437,7 +437,7 @@ const App = () => {
           <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.35em] text-cyan-400">
-                RAG Chat
+                AI Agent
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-white">
                 {activeChat?.title || "Start a new conversation"}
