@@ -16,13 +16,18 @@ const UserSchema = new Schema(
       type: String,
       required: [true, "Password hash is required"],
     },
+    role: {
+      type: String,
+      enum: ["member", "admin"],
+      default: "member",
+    },
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: "Organization",
       required: [true, "Organization ID is required"],
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("User", UserSchema);
