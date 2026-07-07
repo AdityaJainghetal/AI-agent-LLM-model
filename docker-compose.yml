@@ -1,34 +1,45 @@
 services:
-   nginx:
-    image: nginx
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-lb
     ports:
-      - 8000:80  
+      - "8000:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-     
-   server1:
-    build: ./server
-    env_file:
-      - ./server/.env
-    environment:
-      - SERVER_NAME="pehla server"
-    ports:
-      - 5001:7000
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - server1
+      - server2
+      - server3
 
-   server2:
-    build: ./server
+  server1:
+    build: ./base-llm-backend
+    container_name: server1
     env_file:
-      - ./server/.env
+      - ./base-llm-backend/.env
     environment:
-      - SERVER_NAME="dusra server"  
+      - PORT=3008
+      - SERVER_NAME=pehla server
     ports:
-      - 5002:7000    
+      - "5001:3008"
 
-   server3:
-    build: ./server
+  server2:
+    build: ./base-llm-backend
+    container_name: server2
     env_file:
-      - ./server/.env
+      - ./base-llm-backend/.env
     environment:
-      - SERVER_NAME="teesra server"
+      - PORT=3008
+      - SERVER_NAME=dusra server
     ports:
-      - 5003:7000    
+      - "5002:3008"
+
+  server3:
+    build: ./base-llm-backend
+    container_name: server3
+    env_file:
+      - ./base-llm-backend/.env
+    environment:
+      - PORT=3008
+      - SERVER_NAME=teesra server
+    ports:
+      - "5003:3008"
