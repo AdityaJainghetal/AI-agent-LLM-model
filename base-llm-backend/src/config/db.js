@@ -2,26 +2,41 @@
 const mongoose = require("mongoose");
 const { MONGO_URI } = require("./server-config");
 
-// Optional: Mongoose config options
 const options = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  // useCreateIndex: true,   // no longer needed in Mongoose 6+
-  // useFindAndModify: false // deprecated, removed in v6
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 };
 
-// Function to connect to MongoDB
 const connectDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI, options);
+    await mongoose.connect(MONGO_URI);
     console.log("MongoDB connected successfully!");
+    return true;
   } catch (error) {
     console.error("MongoDB connection failed:", error.message);
-    process.exit(1); // Exit process with failure
+    return false;
   }
 };
 
-// Export connection function & mongoose instance
+const startDBConnectionWithRetry = async (retries = 5, delayMs = 5000) => {
+  const connected = await connectDB();
+  if (connected) {
+    return;
+  }
+
+  if (retries <= 0) {
+    console.warn(
+      "MongoDB connection unavailable. Continuing without DB for now.",
+    );
+    return;
+  }
+
+  setTimeout(() => {
+    startDBConnectionWithRetry(retries - 1, delayMs);
+  }, delayMs);
+};
+
 module.exports = {
   connectDB,
+  startDBConnectionWithRetry,
 };

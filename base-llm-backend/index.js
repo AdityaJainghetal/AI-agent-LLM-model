@@ -1,15 +1,22 @@
 // backend-server.js
 const express = require("express");
 const cors = require("cors");
+
+const path = require("node:path");
+// const mongoose = require("mongoose");
+// const morgan = require("morgan");
+const dns = require("node:dns");
+
 const bcrypt = require("bcryptjs");
 const Organization = require("./src/models/Organization");
 const User = require("./src/models/User");
 const { aiRoutes, authRoutes } = require("./src/routes");
 const organizationRoutes = require("./src/routes/organizationRoutes");
 const chatRoutes = require("./src/routes/chatRoutes");
-const { connectDB } = require("./src/config/db");
+const { startDBConnectionWithRetry } = require("./src/config/db");
 const { PORT } = require("./src/config/server-config");
 const morgan = require("morgan");
+dns.setServers(["8.8.8.8", "1.1.1.1", "0.0.0.0"]);
 
 const app = express();
 
@@ -65,9 +72,7 @@ const seedDefaultData = async () => {
   }
 };
 
-connectDB().then(() => {
-  seedDefaultData();
-});
+startDBConnectionWithRetry();
 app.use(morgan("dev"));
 
 // Actual route handlers
@@ -80,7 +85,7 @@ app.use("/api/ai/chats", chatRoutes);
 app.get("/api/health", (req, res) => {
   res.json({
     status: "Backend server is running",
-    timestamp: new Date().toISOString(),o
+    timestamp: new Date().toISOString(),
   });
 });
 
