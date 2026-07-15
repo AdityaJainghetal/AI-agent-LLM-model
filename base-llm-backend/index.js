@@ -22,6 +22,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(compression());
 
+
 // CORS configuration
 app.use(
   cors({
