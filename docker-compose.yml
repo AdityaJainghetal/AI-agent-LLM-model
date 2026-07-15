@@ -1,45 +1,35 @@
 services:
   nginx:
-    image: nginx:alpine
-    container_name: nginx-lb
+    image: nginx
     ports:
       - "8080:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - server1
-      - server2
-      - server3
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    
 
   server1:
     build: ./base-llm-backend
-    container_name: server1
     env_file:
       - ./base-llm-backend/.env
-    environment:
-      - PORT=3008
+    environment:    
       - SERVER_NAME=pehla server
     ports:
       - "5001:3008"
 
   server2:
     build: ./base-llm-backend
-    container_name: server2
     env_file:
       - ./base-llm-backend/.env
-    environment:
-      - PORT=3008
+    environment:  
       - SERVER_NAME=dusra server
     ports:
       - "5002:3008"
 
   server3:
     build: ./base-llm-backend
-    container_name: server3
     env_file:
       - ./base-llm-backend/.env
     environment:
-      - PORT=3008
       - SERVER_NAME=teesra server
     ports:
       - "5003:3008"

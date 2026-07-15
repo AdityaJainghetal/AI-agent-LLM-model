@@ -1,10 +1,10 @@
 // backend-server.js
+require("dotenv").config({ quiet: true });
+require("newrelic");
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 
-const path = require("node:path");
-// const mongoose = require("mongoose");
-// const morgan = require("morgan");
 const dns = require("node:dns");
 
 const bcrypt = require("bcryptjs");
@@ -19,6 +19,8 @@ const morgan = require("morgan");
 dns.setServers(["8.8.8.8", "1.1.1.1", "0.0.0.0"]);
 
 const app = express();
+app.disable("x-powered-by");
+app.use(compression());
 
 // CORS configuration
 app.use(
@@ -73,7 +75,7 @@ const seedDefaultData = async () => {
 };
 
 startDBConnectionWithRetry();
-app.use(morgan("dev"));
+app.use(morgan("tiny"));
 
 // Actual route handlers
 app.use("/api/auth", authRoutes);
@@ -85,8 +87,30 @@ app.use("/api/ai/chats", chatRoutes);
 app.get("/api/health", (req, res) => {
   res.json({
     status: "Backend server is running",
+    serverName: process.env.SERVER_NAME || "Default Server Name",
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    service: process.env.SERVER_NAME || "Default Server Name",
+    message: "Backend is running",
+    endpoints: ["/api/health", "/api/auth", "/api/ai", "/llms.txt"],
+  });
+});
+
+app.get("/llms.txt", (req, res) => {
+  res
+    .type("text/plain")
+    .send(
+      `# llms.txt\n\nThis service exposes a RAG chatbot API.\n- Health: /api/health\n- Auth: /api/auth\n- AI: /api/ai\n`,
+    );
+});
+
+app.head("/llms.txt", (req, res) => {
+  res.status(200).end();
 });
 
 app.use((err, req, res, next) => {
@@ -94,5 +118,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Actual backend running on http://localhost:${PORT}`);
+  console.log(
+    `Actual backend running on ${process.env.SERVER_NAME || "Default Server Name"} at http://localhost:${PORT}`,
+  );
 });
