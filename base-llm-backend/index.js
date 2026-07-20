@@ -1,6 +1,6 @@
 // backend-server.js
 require("dotenv").config({ quiet: true });
-require("newrelic");
+
 const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
@@ -21,7 +21,6 @@ dns.setServers(["8.8.8.8", "1.1.1.1", "0.0.0.0"]);
 const app = express();
 app.disable("x-powered-by");
 app.use(compression());
-
 
 // CORS configuration
 app.use(

@@ -11,14 +11,41 @@ const {
   OLLAMA_GENERATE_ENDPOINT,
 } = require("../config/server-config");
 const DEFAULT_MODEL = DEFAULT_MODEL_LOCAL;
-const MAX_TOKENS = 2000;
+const MAX_TOKENS = 300;
+const CONTEXT_LIMIT = 2;
+const CONTEXT_CHAR_LIMIT = 600;
 
-// Improved system prompt that handles both context and general knowledge
-const DEFAULT_SYSTEM_PROMPT = `You are an intelligent assistant. Follow these guidelines:
-1. Use the provided context to answer questions when relevant information is available
-2. If the context doesn't contain the answer, use your general knowledge to provide a helpful response
-3. Never say "this does not exist in the context" or similar phrases
-4. Always provide the most accurate answer you can, whether from context or general knowledge`;
+// Compact system prompt to keep responses faster and more direct
+const DEFAULT_SYSTEM_PROMPT = `You are a concise assistant. Use the provided context when helpful, otherwise answer directly. Keep your reply short, clear, and practical.`;
+
+function splitIntoStreamChunks(text) {
+  if (typeof text !== "string" || text.length === 0) {
+    return [];
+  }
+
+  return text.split(/(\s+)/).filter((chunk) => chunk.length > 0);
+}
+
+async function warmUpOllamaModel() {
+  try {
+    const startedAt = Date.now();
+    await axios.post(OLLAMA_GENERATE_ENDPOINT, {
+      model: DEFAULT_MODEL,
+      prompt: "Hello",
+      stream: false,
+      options: { num_predict: 8, temperature: 0.1 },
+    });
+    console.log(
+      `[Ollama warmup] completed in ${Date.now() - startedAt}ms for model ${DEFAULT_MODEL}`,
+    );
+  } catch (err) {
+    console.warn(
+      `[Ollama warmup] failed for ${DEFAULT_MODEL}: ${err.message || err}`,
+    );
+  }
+}
+
+warmUpOllamaModel();
 
 /**
  * Streams an LLM response and calls onData(token) for each chunk, then onDone(fullResponse).
@@ -46,28 +73,42 @@ async function streamAIResponse(
     });
   }
 
-  // Build context (RAG) - Get all context without filtering
-  const contextItems = await queryCombinedContext(
-    prompt,
-    organizationId,
-    userId,
-    5,
+  const requestStartedAt = Date.now();
+
+  // Build context quickly. If retrieval is slow, fall back to a plain prompt.
+  const contextStartedAt = Date.now();
+  const contextItems =
+    process.env.SKIP_EMBEDDINGS === "true"
+      ? []
+      : await queryCombinedContext(
+          prompt,
+          organizationId,
+          userId,
+          CONTEXT_LIMIT,
+        );
+  console.log(
+    `[Ollama timing] context retrieval took ${Date.now() - contextStartedAt}ms`,
   );
 
   console.log(`Retrieved ${contextItems.length} context items`);
 
-  // Prepare the context text - use ALL context items without filtering
-  const contextText = contextItems
-    .map((i, idx) => `[Source: ${i.source}] ${i.document}`)
+  const compactContextText = (contextItems || [])
+    .slice(0, CONTEXT_LIMIT)
+    .map((item) => {
+      const document =
+        typeof item?.document === "string"
+          ? item.document.replace(/\s+/g, " ").trim()
+          : "";
+      return `[Source: ${item?.source || "context"}] ${document.slice(0, CONTEXT_CHAR_LIMIT)}`;
+    })
     .join("\n\n");
 
-  // Always include context in the prompt, but with clear instructions
-  const userContent = contextText
-    ? `Context information:\n${contextText}\n\nUser Question: ${prompt}`
+  const userContent = compactContextText
+    ? `Context information:\n${compactContextText}\n\nUser Question: ${prompt}`
     : `User Question: ${prompt}`;
 
   try {
-    const fullPrompt = `${DEFAULT_SYSTEM_PROMPT}\n\n${userContent}`;
+    const fullPrompt = `${DEFAULT_SYSTEM_PROMPT}\n\n${userContent}\n\nAnswer briefly and directly.`;
 
     console.log("Ollama request", {
       endpoint: OLLAMA_GENERATE_ENDPOINT,
@@ -75,13 +116,22 @@ async function streamAIResponse(
       promptLength: fullPrompt.length,
     });
 
+    const modelStartedAt = Date.now();
     const response = await axios.post(
       OLLAMA_GENERATE_ENDPOINT,
       {
         model: DEFAULT_MODEL,
         prompt: fullPrompt,
         stream: true,
-        options: { num_predict: MAX_TOKENS },
+        keep_alive: "10m",
+        options: {
+          num_predict: MAX_TOKENS,
+          num_ctx: 1536,
+          temperature: 0.2,
+          top_p: 0.9,
+          repeat_penalty: 1.1,
+          num_thread: 4,
+        },
       },
       {
         responseType: "stream",
@@ -91,6 +141,10 @@ async function streamAIResponse(
       },
     );
 
+    console.log(
+      `[Ollama timing] model request connected in ${Date.now() - modelStartedAt}ms`,
+    );
+
     response.data.on("data", (chunk) => {
       if (!isStreamActive) return;
       const lines = chunk.toString().split("\n").filter(Boolean);
@@ -98,10 +152,16 @@ async function streamAIResponse(
         try {
           const data = JSON.parse(line);
           if (data.response) {
-            onData(data.response);
-            fullResponse += data.response;
+            const streamChunks = splitIntoStreamChunks(data.response);
+            streamChunks.forEach((token) => {
+              onData(token);
+              fullResponse += token;
+            });
           }
           if (data.done) {
+            console.log(
+              `[Ollama timing] full response completed in ${Date.now() - requestStartedAt}ms`,
+            );
             isStreamActive = false;
             onDone(fullResponse);
             return;
@@ -118,6 +178,12 @@ async function streamAIResponse(
       onDone(fullResponse);
 
       try {
+        // Skip embedding generation for chat responses to avoid blocking the user experience.
+        // This keeps the app responsive and prevents slow timeouts from hurting latency.
+        if (process.env.SKIP_EMBEDDINGS === "true") {
+          return;
+        }
+
         const promptEmb = await generateEmbedding(prompt);
         const respEmb = await generateEmbedding(fullResponse);
         const promptId = uuidv4();

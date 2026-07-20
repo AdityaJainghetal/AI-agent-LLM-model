@@ -130,6 +130,23 @@ const App = () => {
     setError("");
   };
 
+  const parseSSEFrames = (rawText) => {
+    const normalized = rawText.replace(/\r\n/g, "\n");
+    const frames = normalized.split("\n\n");
+    const remainder = frames.pop() || "";
+    return { frames, remainder };
+  };
+
+  const flushBufferedText = (assistantMessageId, text) => {
+    setMessages((current) =>
+      current.map((message) =>
+        message._id === assistantMessageId
+          ? { ...message, content: text }
+          : message,
+      ),
+    );
+  };
+
   const sendPrompt = async (event) => {
     event.preventDefault();
     setError("");
@@ -183,7 +200,24 @@ const App = () => {
       const decoder = new TextDecoder();
       let buffer = "";
       let responseText = "";
+      let pendingText = "";
+      let lastRenderAt = 0;
       let newChatId = activeChat?._id;
+
+      const renderResponse = (nextText) => {
+        const now = Date.now();
+        const shouldFlush = now - lastRenderAt >= 10;
+        pendingText = nextText;
+        if (!shouldFlush) {
+          return;
+        }
+        lastRenderAt = now;
+        flushBufferedText(
+          assistantMessageId,
+          nextText.replace(/\n{3,}/g, "\n\n"),
+        );
+        pendingText = "";
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -192,13 +226,12 @@ const App = () => {
         }
 
         buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
+        const { frames, remainder } = parseSSEFrames(buffer);
+        buffer = remainder;
 
-        for (const part of parts) {
-          const dataLine = part
-            .split("\n")
-            .find((line) => line.startsWith("data:"));
+        for (const frame of frames) {
+          const eventLines = frame.split("\n");
+          const dataLine = eventLines.find((line) => line.startsWith("data:"));
           if (!dataLine) {
             continue;
           }
@@ -222,13 +255,7 @@ const App = () => {
             }
             if (typeof event.token === "string") {
               responseText += event.token;
-              setMessages((current) =>
-                current.map((message) =>
-                  message._id === assistantMessageId
-                    ? { ...message, content: responseText }
-                    : message,
-                ),
-              );
+              renderResponse(responseText);
             }
           } catch (parseError) {
             console.warn("Failed to parse SSE payload", parseError);
@@ -249,18 +276,19 @@ const App = () => {
             }
             if (typeof event.token === "string") {
               responseText += event.token;
-              setMessages((current) =>
-                current.map((message) =>
-                  message._id === assistantMessageId
-                    ? { ...message, content: responseText }
-                    : message,
-                ),
-              );
+              renderResponse(responseText);
             }
           } catch (parseError) {
             console.warn("Final SSE parse failed", parseError);
           }
         }
+      }
+
+      if (pendingText) {
+        flushBufferedText(
+          assistantMessageId,
+          pendingText.replace(/\n{3,}/g, "\n\n"),
+        );
       }
 
       setMessages((current) =>
@@ -485,8 +513,11 @@ const App = () => {
                         <span className="text-cyan-300">Streaming…</span>
                       )}
                     </div>
-                    <div className="whitespace-pre-wrap text-sm leading-6 text-slate-100">
+                    <div className="whitespace-pre-wrap wrap-break-word text-sm leading-6 text-slate-100">
                       {message.content}
+                      {message.streaming && message.role === "assistant" ? (
+                        <span className="ml-1 inline-block h-4 w-2 animate-pulse rounded-full bg-cyan-300 align-middle" />
+                      ) : null}
                     </div>
                   </div>
                 ))}

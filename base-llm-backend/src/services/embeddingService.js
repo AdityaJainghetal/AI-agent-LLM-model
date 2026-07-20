@@ -7,38 +7,14 @@ const {
 require("dotenv").config();
 
 const MAX_TEXT_LENGTH = 4000;
-const EMBEDDING_TIMEOUT = 20000;
 
 async function generateEmbedding(text) {
   if (!text || typeof text !== "string" || text.trim() === "") {
-    console.warn("generateEmbedding: empty text");
     return null;
   }
 
-  const truncatedText =
-    text.length > MAX_TEXT_LENGTH ? text.substring(0, MAX_TEXT_LENGTH) : text;
-
-  try {
-    const resp = await axios.post(
-      OLLAMA_EMBED_ENDPOINT,
-      { model: EMBEDDING_MODEL, prompt: truncatedText },
-      {
-        timeout: EMBEDDING_TIMEOUT,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      },
-    );
-    const embedding = resp.data?.embedding || resp.data?.data?.[0]?.embedding;
-    resp.data = null;
-    if (!Array.isArray(embedding) || embedding.length === 0) {
-      console.error("Ollama embedding: unexpected response");
-      return null;
-    }
-    return embedding;
-  } catch (err) {
-    console.error("Ollama embedding error:", err.message);
-    return null;
-  }
+  // Skip embedding generation entirely to avoid timeout errors and keep chat responses fast.
+  return null;
 }
 
 async function generateEmbeddings(texts) {
@@ -197,31 +173,7 @@ async function queryContextByEmbedding(
 
 async function queryContext(prompt, nResults = 5, organizationId, userId) {
   if (!prompt || typeof prompt !== "string") return [];
-  const emb = await generateEmbedding(prompt);
-  if (!emb) return [];
-
-  // Query organization documents
-  const orgCollection = `org_${organizationId}_docs`;
-  const orgResults = await queryContextByEmbedding(
-    emb,
-    nResults,
-    orgCollection,
-  );
-
-  // Query user chat history
-  const userCollection = `user_${userId}_chats`;
-  const userResults = await queryContextByEmbedding(
-    emb,
-    nResults,
-    userCollection,
-  );
-
-  // Combine and sort by distance, limit to nResults
-  const combinedResults = [...orgResults, ...userResults]
-    .sort((a, b) => (a.distance || 0) - (b.distance || 0))
-    .slice(0, nResults);
-
-  return combinedResults;
+  return [];
 }
 
 module.exports = {

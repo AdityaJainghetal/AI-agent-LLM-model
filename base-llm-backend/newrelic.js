@@ -11,17 +11,7 @@
 //   }
 // };
 
-'use strict'
+"use strict";
 
-exports.config = {
-  app_name: [process.env.NEW_RELIC_APP_NAME || 'MERN Chatbot'],
-  license_key: process.env.NEW_RELIC_LICENSE_KEY || "d89667fd855aca0fc3a40478aee0fe96e94fNRAL",
-
-  logging: {
-    level: 'info'
-  },
-
-  distributed_tracing: {
-    enabled: true
-  }
-}
+// Backend New Relic integration has been removed. This file remains as a no-op.
+module.exports = {};
